@@ -25,8 +25,7 @@
  *
  *   3) error_reporting is set to E_STRICT, so that even notices cause an
  *      exception to be thrown.  This way we are forced to deal with even
- *      the minor issues during development, and hopefully fewer issues
-  make it out into the world.
+ *      the minor issues during development, and hopefully fewer issues make it out into the world.
  */
 require_once( dirname(__FILE__) . DIRECTORY_SEPARATOR . 'strict_mode.php' );
 init_strict_mode();
