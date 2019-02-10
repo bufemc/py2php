@@ -315,7 +315,7 @@ function pyjslib_printWorker($objs, $nl, $multi_arg, $depth=1) {
         $buf = 'None';
     }
     else if( is_float( $objs )) {
-        $buf = (int)$objs;
+        $buf = (float)$objs;
     }
     else if( is_string( $objs ) && ($multi_arg && $depth > 2 || (!$multi_arg && $depth > 1) ) ) {
         $buf = "'$objs'";
