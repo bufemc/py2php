@@ -136,8 +136,29 @@ The file py2phplib.php contains some PHP functions that emulate python keywords
 such as print, range, etc.  py2php automatically renames these keywords to call
 the emulated functions instead.
 
-Look in the tests directory for more examples.
+Latest additions (1st of March 2019):
+py2php.py is now able to convert most of Python string functions to php functions.
+Supported string functions are:
 
+```
+capitalize, center, count, endswith, find, index, isalnum, isalpha, isdigit, 
+islower, isspace, isupper, join, lower, lstrip, replace, rfind, rindex, rstrip, 
+split, splitlines, startswith, strip, swapcase, upper, zfill
+```
+
+Furtheron it also supports enumerate in for loops:
+```
+for i, elem in enumerate(arr):
+    print i, elem, "<br>"
+```
+is now translated to:
+```
+foreach( pyjslib_list($arr) as $i => $elem) {
+    pyjslib_printnl([$i, $elem, '<br>'], true);
+}
+```
+
+Look in the tests directory for more examples.
 
 # translate_python_to_php
 
