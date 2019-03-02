@@ -347,7 +347,7 @@ class Translator:
             elif v.node.name == "range":
                 call_name = "pyjslib_range"
             elif v.node.name == "len":
-                call_name = "count"
+                call_name = "strlen"
             elif v.node.name == "sum":
                 call_name = "pyjslib_sum"
             elif v.node.name == "min":
@@ -369,6 +369,8 @@ class Translator:
             elif v.node.name == "filter":
                 call_args = self._customcallargs(v.args, ['callable'], current_klass)
                 call_name = "pyjslib_filter"
+            elif v.node.name == "float":
+                call_name = "floatval"
             elif v.node.name in python_builtins:
                 call_name = v.node.name
             else:
