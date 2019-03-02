@@ -1276,8 +1276,18 @@ class Translator:
         
         lhs = "var " + assign_name
         iterator_name = "__" + assign_name
-        
-        buf += self.ind() + "foreach( pyjslib_list(%(list_expr)s) as %(dollar)s%(assign_name)s ) {\n" % locals()
+        if "enumerate" in list_expr:
+            list_expr1 = list_expr.replace("enumerate", "")
+            list_expr1 = list_expr1.strip()
+            if list_expr1[0]=="(": list_expr1 = list_expr1[1:]
+            if list_expr1[-1]==")": list_expr1 = list_expr1[:-1]
+            assign_names = assign_name.replace("list(", "")[:-1]
+            assign_names = assign_names.split(", ")
+            assign_name = [list_expr1]
+            assign_name.extend(assign_names)
+            buf += self.ind() + "foreach( pyjslib_list(%s) as %s => %s) {\n" % tuple(assign_name)
+        else:
+            buf += self.ind() + "foreach( pyjslib_list(%(list_expr)s) as %(dollar)s%(assign_name)s ) {\n" % locals()
         self.depth += 1
         for node in node.body.nodes:
             buf += self._stmt(node, current_klass)
@@ -1881,71 +1891,146 @@ class AppTranslator:
         
         return imported_modules_str
 
+def getstr_comp(line, func_name):
+    rep_dic = {"->zfill(": "str_pad('!#var#!', '!#args#!', '0', STR_PAD_LEFT)",
+               "->startswith(": "(strpos('!#var#!', '!#args#!') === 0)", 
+               "->endswith(": "(substr('!#var#!', -strlen('!#args#!')) === '!#args#!')", 
+               "->upper(": "strtoupper('!#var#!')", 
+               "->lower(": "strtolower('!#var#!')",
+               "->count(": "substr_count('!#var#!', '!#args#!')",
+               "->center(": "str_pad('!#var#!', '!#args#!', STR_PAD_BOTH)",
+               "->capitalize(": "ucfirst('!#var#!')", 
+               "->find(": "strpos('!#var#!', '!#args#!')",
+               "->rfind(": "strrpos('!#var#!', '!#args#!')",
+               "->index(": "strpos('!#var#!', '!#args#!')",
+               "->rindex(": "strrpos('!#var#!', '!#args#!')",
+               "->islower(": "ctype_lower('!#var#!')",
+               "->isupper(": "ctype_upper('!#var#!')",
+               "->isspace(": "ctype_space('!#var#!')",
+               "->isalnum(": "ctype_alnum('!#var#!')",
+               "->isalpha(": "ctype_alpha('!#var#!')",
+               "->isdigit(": "ctype_digit('!#var#!')",
+               "->join(": "join('!#var#!', '!#args#!')",
+               "->replace(": "str_replace('!#args#!', '!#var#!')",
+               "->split(": "explode('!#args#!', '!#var#!')",
+               "->splitlines(": "explode('!#dblsl_n#!', '!#var#!')",
+               "->strip(": "trim('!#var#!', '!#args#!')",
+               "->rstrip(": "rtrim('!#var#!', '!#args#!')",
+               "->lstrip(": "ltrim('!#var#!', '!#args#!')",
+               "->swapcase(": "strtr('!#var#!', 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')"
+               }
+    while func_name in line:
+        pos = line.find(func_name)
+        # find $ or ' or " backwards from pos
+        posvar = pos
+        while line[posvar]!="$" and line[posvar]!="'" and line[posvar]!='"':
+            posvar -= 1
+        if line[posvar]!="$":
+            if line[posvar]=="'":
+                posvar = line[:posvar].rfind("'")
+            else:
+                posvar = line[:posvar].rfind('"')
+        start = line[:posvar]
+        var = line[posvar:pos]
+        new_func = rep_dic[func_name]
+        # find the closing round bracket to the function
+        st1 = pos + len(func_name) - 1
+        st = st1
+        op = 0
+        cl = 0
+        while (op==0 and cl==0) or op!=cl:
+            if line[st] == "(": op += 1
+            if line[st] == ")": cl += 1
+            st = st + 1
+            if st>(line): break
+        args = line[st1+1:st-1]
+        end = line[st:]
+        line = start + new_func.replace("'!#var#!'", var).replace("'!#args#!'", args) + end
+        line = line.replace(", )", ")") # in case of strip()
+    return line
+
+def test_strfuncs(line):
+    string_functions = ["->zfill(", "->startswith(", "->endswith(", "->upper(", "->lower(", "->count(", "->center(", "->capitalize(", "->find(", "->rfind(", "->index(", "->rindex(", "->islower(", "->isupper(", "->isspace(", "->isalnum(", "->isalpha(", "->isdigit(", "->join(", "->replace(", "->split(", "->splitlines(", "->strip(", "->rstrip(", "->lstrip(", "->swapcase(" ]
+    for fun in string_functions:
+        if fun in line:
+            line = getstr_comp(line, fun)
+    return line
 
 if __name__ == "__main__":
     import sys
-    file_name = sys.argv[1]
-    output_filename = os.path.splitext(os.path.basename(file_name))[0] + ".php"
-    if len(sys.argv) > 2:
-        module_name = sys.argv[2]
+    if len(sys.argv) == 1:
+        print "Usage: py2php.py pythonscript.py\nThis will produce a php script called pythonscript.php"
     else:
-        module_name = None
+        file_name = sys.argv[1]
+        output_filename = os.path.splitext(os.path.basename(file_name))[0] + ".php"
+        if len(sys.argv) > 2:
+            module_name = sys.argv[2]
+        else:
+            module_name = None
 
-    math_expression_php = ["acosh", "acos", "asinh", "asin", "atan2", "atanh", "atan", "ceil", "cosh", "cos", "deg2rad", "expm1", "exp", "M_E", "floor", "fmod", "hypot", "is_infinite", "is_nan", "log10", "log1p", "log", "modf", "M_PI", "pow", "rad2deg", "sinh", "sin", "sqrt", "tanh", "tan"]
-    math_expressions_py = ['acosh', 'acos', 'asinh', 'asin', 'atan2', 'atanh', 'atan', 'ceil', 'cosh', 'cos', 'radians', 'expm1', 'exp', 'e',   'floor', 'fmod', 'hypot', 'isinf',       'isnan',  'log10', 'log1p', 'log', 'modf', 'pi',   'pow', 'degrees', 'sinh', 'sin', 'sqrt', 'tanh', 'tan']
+        math_expression_php = ["acosh", "acos", "asinh", "asin", "atan2", "atanh", "atan", "ceil", "cosh", "cos", "deg2rad", "expm1", "exp", "M_E", "floor", "fmod", "hypot", "is_infinite", "is_nan", "log10", "log1p", "log", "modf", "M_PI", "pow", "rad2deg", "sinh", "sin", "sqrt", "tanh", "tan"]
+        math_expressions_py = ['acosh', 'acos', 'asinh', 'asin', 'atan2', 'atanh', 'atan', 'ceil', 'cosh', 'cos', 'radians', 'expm1', 'exp', 'e',   'floor', 'fmod', 'hypot', 'isinf',       'isnan',  'log10', 'log1p', 'log', 'modf', 'pi',   'pow', 'degrees', 'sinh', 'sin', 'sqrt', 'tanh', 'tan']
 
-    # retrieve and keep the comments in the python file:
-    pythonfile = open(file_name, "rb")
-    lines = pythonfile.readlines()
-    pythonfile.close()
-    coding = ""
-    codetag = "# -*- coding:"
-    lc = len(codetag)
-    math_included = False
-    for line in lines:
-        if line.startswith(codetag):
-            end = line[lc:].find("-*-")
-            coding = line[lc:lc+end].strip(" ").lstrip(" ")
-            print "coding of the file:", coding
-        if "import math" in line:
-            math_included = True
-    if coding == "":
-        coding = "utf-8"
-    new_lines = []
-    for line in lines:
-        if line.lstrip(" \t").startswith("#"):
-            tag = line.find("#")
-            line = line[:tag] + '"""' + line.strip()[tag+1:] + '"""\n'
-        new_lines.append(line.decode(coding))
-    pythonfile = open("tmp.py", "wb")
-    for line in new_lines:
-        pythonfile.write(line.encode(coding))
-    pythonfile.close()
-    # necessary for print unicode to non utf-8 output, eg redirect to file.
-    # python 2.x is crazy.
-    # see: https://wiki.python.org/moin/PrintFails
-    sys.stdout = codecs.getwriter(locale.getpreferredencoding())(sys.stdout);
-    
-    translated_code = "<?php " + translate("tmp.py", module_name),
-    # print translated_code, type(translated_code)
-    tagname = "math::"
-    save_file = open(output_filename, "wb")
-    for line in translated_code[0].split("\n"):
-        if math_included:
-            found = True
-            while tagname in line and found:
-                tag = line.find(tagname)
-                line_rest = line[tag+len(tagname):]
-                found = False
-                for i, exp in enumerate(math_expressions_py):
-                    if line_rest.startswith(exp):
-                        line = line[:tag] + math_expression_php[i] + line_rest[len(exp):] 
-                        found = True
-                        break
-            if "require_once( 'math.php');" in line:
-                line = """function modf($zahl) {
-    return [$zahl-pyjslib_int($zahl), pyjslib_int($zahl)];
-} """
-        save_file.write(line.encode(coding)+"\n")
-    save_file.close()
-    print "File written to:", output_filename
+        # retrieve and keep the comments in the python file:
+        pythonfile = open(file_name, "rb")
+        lines = pythonfile.readlines()
+        pythonfile.close()
+        coding = ""
+        codetag = "# -*- coding:"
+        lc = len(codetag)
+        math_included = False
+        for line in lines:
+            if line.startswith(codetag):
+                end = line[lc:].find("-*-")
+                coding = line[lc:lc+end].strip(" ").lstrip(" ")
+                print "coding of the file:", coding
+            if "import math" in line:
+                math_included = True
+        if coding == "":
+            coding = "utf-8"
+        keep_strs =     ['\\n', '\\t', '\\r']
+        keep_strs_rep = ['!#dblsl_n#!', '!#dblsl_t#!', '!#dblsl_r#!']
+        for k, rep in enumerate(keep_strs):
+            for l, line in enumerate(lines):
+                lines[l] = line.replace(rep, keep_strs_rep[k])
+        new_lines = []
+        for line in lines:
+            if line.lstrip(" \t").startswith("#"):
+                tag = line.find("#")
+                line = line[:tag] + '"""' + line.strip()[tag+1:] + '"""\n'
+            new_lines.append(line.decode(coding))
+        pythonfile = open("tmp.py", "wb")
+        for line in new_lines:
+            pythonfile.write(line.encode(coding))
+        pythonfile.close()
+        # necessary for print unicode to non utf-8 output, eg redirect to file.
+        # python 2.x is crazy.
+        # see: https://wiki.python.org/moin/PrintFails
+        sys.stdout = codecs.getwriter(locale.getpreferredencoding())(sys.stdout);
+        
+        translated_code = "<?php " + translate("tmp.py", module_name),
+        # print translated_code, type(translated_code)
+        mtagname = "math::"
+        save_file = open(output_filename, "wb")
+        for line in translated_code[0].split("\n"):
+            if math_included:
+                found = True
+                while mtagname in line and found:
+                    tag = line.find(mtagname)
+                    line_rest = line[tag+len(mtagname):]
+                    found = False
+                    for i, exp in enumerate(math_expressions_py):
+                        if line_rest.startswith(exp):
+                            line = line[:tag] + math_expression_php[i] + line_rest[len(exp):] 
+                            found = True
+                            break
+                if "require_once( 'math.php');" in line:
+                    line = """function modf($zahl) {
+        return [$zahl-pyjslib_int($zahl), pyjslib_int($zahl)];
+    } """
+            line = test_strfuncs(line)
+            for k, rep in enumerate(keep_strs):
+                line = line.replace(keep_strs_rep[k], rep)
+            save_file.write(line.encode(coding)+"\n")
+        save_file.close()
+        print "File written to:", output_filename
