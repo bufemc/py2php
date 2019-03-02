@@ -89,8 +89,11 @@ function pyjslib_int($a) {
 }
 
 function pyjslib_str($val) {
-    return (string)$val;
-}
+    try {
+        return (string)$val;}
+    catch (Exception $e) {
+        return implode(", ", $val);}}
+
 
 function pyjslib_del_slice(&$list, $from, $to, $step=1) {
     if( $from <= 0 ) {
